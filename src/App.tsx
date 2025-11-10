@@ -4,6 +4,7 @@ import { Banner } from './components/Banner';
 import { Cart } from './components/Cart';
 import { Menu } from './components/Menu';
 import { OrderDialog } from './components/OrderDialog';
+import { PlainLogin } from './components/PlainLogin';
 import { CartProvider, useCart } from './context/CartContext';
 import { initLiff, sendMessage, type LiffProfile } from './lib/liff';
 
@@ -26,6 +27,10 @@ function AppContent() {
 
   const apiBaseUrl = useMemo(
     () => (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim(),
+    []
+  );
+  const canUseLiff = useMemo(
+    () => Boolean(import.meta.env.VITE_LIFF_ID),
     []
   );
 
@@ -69,6 +74,21 @@ function AppContent() {
     setDialogOpen(true);
   };
 
+  const handlePlainLogin = (profile: {
+    displayName: string;
+    pictureUrl?: string;
+  }) => {
+    setAppState({
+      loading: false,
+      profile: {
+        userId: `manual-${Date.now()}`,
+        displayName: profile.displayName,
+        pictureUrl: profile.pictureUrl
+      },
+      error: null
+    });
+  };
+
   const handleConfirmOrder = async () => {
     setSubmitting(true);
     setSubmitError(null);
@@ -96,17 +116,24 @@ function AppContent() {
         });
       }
 
-      await sendMessage({
-        type: 'text',
-        text: `Thank you for your order!\n\n${payload.items
-          .map(
-            (item) =>
-              `• ${item.name} × ${item.quantity} — $${(
-                item.price * item.quantity
-              ).toFixed(2)}`
-          )
-          .join('\n')}\n\nTotal: $${payload.total.toFixed(2)}`
-      });
+      if (canUseLiff) {
+        await sendMessage({
+          type: 'text',
+          text: `Thank you for your order!\n\n${payload.items
+            .map(
+              (item) =>
+                `• ${item.name} × ${item.quantity} — $${(
+                  item.price * item.quantity
+                ).toFixed(2)}`
+            )
+            .join('\n')}\n\nTotal: $${payload.total.toFixed(2)}`
+        });
+      } else {
+        console.info(
+          'Order placed in manual mode. Skipping liff.sendMessages call.',
+          payload
+        );
+      }
 
       clearCart();
       setDialogOpen(false);
@@ -132,6 +159,10 @@ function AppContent() {
         </div>
       </div>
     );
+  }
+
+  if (!canUseLiff && !appState.profile) {
+    return <PlainLogin onSubmit={handlePlainLogin} />;
   }
 
   return (
